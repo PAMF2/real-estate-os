@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { deleteContract } from "../actions";
+import { generatePayment, markPaymentPaid } from "./payment-actions";
+import { Input, Label } from "@/components/ui/input";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,10 @@ export default async function ContractDetailPage({ params }: { params: { id: str
   async function handleDelete() {
     "use server";
     await deleteContract(params.id);
+  }
+  async function handleGeneratePayment(formData: FormData) {
+    "use server";
+    await generatePayment(params.id, formData);
   }
 
   const meta: Array<[string, string | React.ReactNode]> = [
@@ -95,6 +101,30 @@ export default async function ContractDetailPage({ params }: { params: { id: str
         <div className="flex items-baseline justify-between mb-space-4">
           <h2 className="text-h1">Payments</h2>
         </div>
+
+        <div className="rounded-card border border-border-hair bg-bg-surface p-space-5 mb-space-5">
+          <p className="eyebrow mb-space-3">Generate payment via PaymentLine</p>
+          <form action={handleGeneratePayment} className="flex flex-wrap items-end gap-space-3">
+            <div className="flex flex-col gap-space-2">
+              <Label htmlFor="amountCents">Amount (cents)</Label>
+              <Input
+                id="amountCents"
+                name="amountCents"
+                type="number"
+                min="1"
+                required
+                defaultValue={contract.monthlyCents ?? contract.totalCents}
+                className="w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-space-2">
+              <Label htmlFor="dueDate">Due date</Label>
+              <Input id="dueDate" name="dueDate" type="date" required className="w-44" />
+            </div>
+            <Button type="submit">Generate charge</Button>
+          </form>
+        </div>
+
         {contract.payments.length === 0 ? (
           <p className="text-body-sm text-ink-secondary">No payments scheduled yet.</p>
         ) : (
@@ -104,19 +134,45 @@ export default async function ContractDetailPage({ params }: { params: { id: str
                 <tr className="text-left">
                   <th className="px-space-5 py-space-3 eyebrow">Due</th>
                   <th className="px-space-5 py-space-3 eyebrow">Status</th>
+                  <th className="px-space-5 py-space-3 eyebrow">PaymentLine</th>
                   <th className="px-space-5 py-space-3 eyebrow text-right">Amount</th>
+                  <th className="px-space-5 py-space-3 eyebrow text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {contract.payments.map((p) => (
-                  <tr key={p.id} className="border-t border-border-hair">
-                    <td className="px-space-5 py-space-3 text-body-sm font-mono font-tabular">{formatDate(p.dueDate)}</td>
-                    <td className="px-space-5 py-space-3 text-body-sm capitalize">{p.status}</td>
-                    <td className="px-space-5 py-space-3 text-body-sm text-right font-mono font-tabular">
-                      {formatCurrency(p.amountCents / 100)}
-                    </td>
-                  </tr>
-                ))}
+                {contract.payments.map((p) => {
+                  async function markPaid() {
+                    "use server";
+                    await markPaymentPaid(p.id);
+                  }
+                  return (
+                    <tr key={p.id} className="border-t border-border-hair">
+                      <td className="px-space-5 py-space-3 text-body-sm font-mono font-tabular">{formatDate(p.dueDate)}</td>
+                      <td className="px-space-5 py-space-3 text-body-sm capitalize">
+                        <span className={p.status === "paid" ? "text-success" : "text-ink-primary"}>{p.status}</span>
+                      </td>
+                      <td className="px-space-5 py-space-3 text-body-sm">
+                        {p.externalUrl ? (
+                          <a href={p.externalUrl} target="_blank" rel="noreferrer" className="text-accent hover:text-accent-hover font-mono">
+                            {p.externalId?.slice(0, 16)}…
+                          </a>
+                        ) : (
+                          <span className="text-ink-muted">—</span>
+                        )}
+                      </td>
+                      <td className="px-space-5 py-space-3 text-body-sm text-right font-mono font-tabular">
+                        {formatCurrency(p.amountCents / 100)}
+                      </td>
+                      <td className="px-space-5 py-space-3 text-right">
+                        {p.status === "pending" ? (
+                          <form action={markPaid}>
+                            <Button type="submit" variant="ghost" size="sm">Mark paid</Button>
+                          </form>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
